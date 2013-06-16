@@ -29,12 +29,12 @@ public class ObservableArray<T> where T : IComparable<T>  {
        public T this[int i] {
               get {
                   checkBounds(i);
-                  
                   return array[i].wrapped;
               }
               set {
                   checkBounds(i);
-                  array[i] = new Wrapper(value);
+                  fireAssign(new AssignEvent<T>(i, value));
+                  array[i] = new Wrapper(value, this);
               }
        }
 
@@ -70,19 +70,74 @@ public class ObservableArray<T> where T : IComparable<T>  {
        
        protected class Wrapper : IComparable<Wrapper> {
              public T wrapped;
-             public Wrapper (T val) {
+             private ObservableArray<T> outer;
+
+             public Wrapper (T val, ObservableArray<T> outer) {
                     wrapped = val;
+                    this.outer = outer;
              }
 
              public int CompareTo(Wrapper other) {
+                    outer.fireCompare(new CompareEvent<T>(wrapped, other.wrapped));
                     return wrapped.CompareTo(other.wrapped);
              }
        }
 
 }
 
+public static class Sorting {
+    public static void insertionSort<T>(ObservableArray<T> array) where T : IComparable<T> {
+                
+    }
+}
+
 public class MainClass {
        public static void Main(String[] args) {
- //             ObservableArray<int> arr = new ObservableArray<int>();
+             ObservableArray<int> arr = new ObservableArray<int>(new int[] {2,3,5});
+             
+             Sorting.insertionSort(arr);
+             
        }
 }
+
+public interface ArrayView<T> {
+    void init();
+    EventHandler<CompareEvent<T>> compareHandler {get;}
+    EventHandler<AssignEvent<T>> assignHandler {get;}
+}
+
+public class Controller<T> where T : IComparable<T> {
+    private ObservableArray<T> arr;
+    private ArrayView<T> view;
+    
+    public Controller(ObservableArray<T> arr, ArrayView<T> view) {
+        this.arr = arr;
+        this.view = view;
+        arr.Compare += view.compareHandler;
+        arr.Assign += view.assignHandler;
+    }        
+}
+
+public class ASCIIView<T> : ArrayView<T> {
+    public void init() {
+    
+    }
+    
+    public EventHandler<CompareEvent<T>> compareHandler { get; private set; }
+    public EventHandler<AssignEvent<T>> assignHandler { get; private set; }
+    
+    public ASCIIView() {
+        compareHandler = compareEvent;
+        assignHandler = assignEvent;
+    }
+    
+    public void compareEvent(Object sender, CompareEvent<T> e) {
+    
+    }
+    
+    public void assignEvent(Object sender, AssignEvent<T> e) {
+    
+    }
+}
+
+
