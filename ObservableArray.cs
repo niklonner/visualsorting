@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+// (Yes, the class can use an underlying list but
+// one purpose of this exercise is for me to write
+// some C#.)
 public class ObservableList<T> : IList<T> {
     private T[] array;
     private int Size;
@@ -28,12 +31,20 @@ public class ObservableList<T> : IList<T> {
         }
         set {
             CheckBounds(index,false);
+            fireAssign(index,value);
             if (index == Count) {
                 EnsureCapacity(index+1);
                 Count++;
             }
             array[index] = value;
         }
+    }
+
+    public event EventHandler<CompareEvent<T>> Compare;
+    public event EventHandler<AssignEvent<T>> Assign;
+
+    public ObservableList() {
+        array = new T[10];
     }
 
     private void CheckBounds(int i, bool tight) {
@@ -56,7 +67,21 @@ public class ObservableList<T> : IList<T> {
         }
         array = NewArr;
     }
-    
+
+    private void fireCompare(T e1, T e2) {
+        CompareEvent<T> args = new CompareEvent<T>(e1, e2);
+        if (Compare != null) {
+            Compare(this, args);
+        }
+    }
+
+    private void fireAssign(int index, T obj) {
+        AssignEvent<T> args = new AssignEvent<T>(index, obj);
+        if (Assign != null) {
+            Assign(this, args);
+        }
+    }
+
     public int IndexOf(T elem) {
         Comparer<T> comp = Comparer<T>.Default;
         for(int i=0;i<Count;i++) {
@@ -89,12 +114,19 @@ public class ObservableList<T> : IList<T> {
         Count--;
     }
     
-    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() {
+    System.Collections.IEnumerator 
+            System.Collections.IEnumerable.GetEnumerator() {
         return GetEnumerator();
     }
     
     public IEnumerator<T> GetEnumerator() {
-        return ((IEnumerable<T>)array).GetEnumerator();
+        return GetEnumeratorHelper().GetEnumerator();
+    }
+    
+    private IEnumerable<T> GetEnumeratorHelper() {
+        for (int i=0;i<Count;i++) {
+            yield return array[i];
+        }
     }
     
     public void Add(T elem) {
@@ -148,99 +180,22 @@ public class AssignEvent<T> : EventArgs {
        public T obj { get; private set; }
 }
 
-public class ObservableArray<T> : IEnumerable<T> where T : IComparable<T>  {
-       private Wrapper[] array;
+    internal class Wrapper<T> : IComparable<Wrapper<T>> where T : IComparable<T> {
+         public T wrapped;
 
-       public int Length {
-            get {
-                return array.Length;
-            }
-       }
+         public Wrapper (T val) {
+                wrapped = val;
+         }
 
-       public event EventHandler<CompareEvent<T>> Compare;
-       public event EventHandler<AssignEvent<T>> Assign;
-
-       System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() {
-            return GetEnumerator();
-       }
-
-       public IEnumerator<T> GetEnumerator() {
-            return GetEnumeratorHelper().GetEnumerator();
-       }
-       
-       private IEnumerable<T> GetEnumeratorHelper() {
-            foreach (Wrapper w in array) {
-                yield return w.wrapped;
-            }            
-       }
-
-       public void sort<X>(Action<X[]> func) where X : IComparable<X> {
-//              Action<IComparable<X>[]> a = func;
-//            func(array);
-       }
-
-       public T this[int i] {
-              get {
-                  checkBounds(i);
-                  return array[i].wrapped;
-              }
-              set {
-                  checkBounds(i);
-                  fireAssign(new AssignEvent<T>(i, value));
-                  array[i] = new Wrapper(value, this);
-              }
-       }
-
-       private void fireCompare(CompareEvent<T> args) {
-               if (Compare != null) {
-                  Compare(this, args);
-               }
-       }
-
-       private void fireAssign(AssignEvent<T> args) {
-               if (Assign != null) {
-                  Assign(this, args);
-               }
-       }
-       
-       private void checkBounds(int i) {
-               if (i < 0 || i >= array.Length) {
-                  throw new ArgumentOutOfRangeException();
-               }
-       }
-       
-       public ObservableArray(int size) {
-              array = new Wrapper[size];
-       }
-
-       public ObservableArray(T[] arr) {
-              array = new Wrapper[arr.Length];
-              int i=0;
-              foreach (T t in arr) {
-                    this[i++] = t;
-              }
-       }
-       
-       protected class Wrapper : IComparable<Wrapper> {
-             public T wrapped;
-             private ObservableArray<T> outer;
-
-             public Wrapper (T val, ObservableArray<T> outer) {
-                    wrapped = val;
-                    this.outer = outer;
-             }
-
-             public int CompareTo(Wrapper other) {
-                    outer.fireCompare(new CompareEvent<T>(wrapped, other.wrapped));
-                    return wrapped.CompareTo(other.wrapped);
-             }
-       }
-
-}
+         public int CompareTo(Wrapper<T> other) {
+//                outer.fireCompare(new CompareEvent<T>(wrapped, other.wrapped));
+                return wrapped.CompareTo(other.wrapped);
+         }
+    }
 
 public static class Sorting {
-    public static void insertionSort<T>(T[] array) where T : IComparable<T> {
-        for (int i=1;i<array.Length;i++) {
+    public static void insertionSort<T>(IList<T> array) where T : IComparable<T> {
+        for (int i=1;i<array.Count;i++) {
             int j = i;
             T val = array[j];
             while (j>0 && val.CompareTo(array[j-1]) < 0) {
@@ -253,9 +208,18 @@ public static class Sorting {
 }
 
 public class MainClass {
-       public static void Main(String[] args) {
-             ObservableArray<int> arr = new ObservableArray<int>(new int[] {3,2,5});
-             foreach (int x in arr) {
+    public static void Main(String[] args) {
+        ObservableList<int> list = new ObservableList<int>();
+        list.Add(2);
+        list.Add(5);
+        list.Add(3);
+//        list[2]=list[0];
+        Console.WriteLine(list);
+        Sorting.insertionSort(list);
+        Console.WriteLine(list);
+//        foreach (int i
+//        ObservableArray<int> arr = new ObservableArray<int>(new int[] {3,2,5});
+/*             foreach (int x in arr) {
                 Console.WriteLine(x);
              }
              Controller<int> c = new Controller<int>(arr, new ASCIIView<int>());
@@ -263,8 +227,8 @@ public class MainClass {
              c.sort<int>(Sorting.insertionSort);
              foreach (int x in arr) {
                 Console.WriteLine(x);
-             }                         
-       }
+             }                       */  
+    }
 }
 
 public interface ArrayView<T> {
@@ -274,18 +238,18 @@ public interface ArrayView<T> {
 }
 
 public class Controller<T> where T : IComparable<T> {
-    private ObservableArray<T> arr;
+//    private ObservableArray<T> arr;
     private ArrayView<T> view;
     
-    public Controller(ObservableArray<T> arr, ArrayView<T> view) {
-        this.arr = arr;
+    public Controller(ArrayView<T> view) {
+//        this.arr = arr;
         this.view = view;
-        arr.Compare += view.compareHandler;
-        arr.Assign += view.assignHandler;
+//        arr.Compare += view.compareHandler;
+//        arr.Assign += view.assignHandler;
     }        
     
     public void sort<X>(Action<X[]> func) where X : IComparable<X> {
-        arr.sort(func);
+//        arr.sort(func);
     }
 }
 
