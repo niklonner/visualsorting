@@ -31,17 +31,16 @@ public class ObservableList<T> : IList<T> {
         }
         set {
             CheckBounds(index,false);
-            fireAssign(index,value);
             if (index == Count) {
                 EnsureCapacity(index+1);
                 Count++;
             }
             array[index] = value;
+            fireAssign(index);
         }
     }
 
-    public event EventHandler<CompareEvent<T>> Compare;
-    public event EventHandler<AssignEvent<T>> Assign;
+    public event EventHandler<AssignEvent> Assign;
 
     public ObservableList() {
         array = new T[10];
@@ -68,15 +67,8 @@ public class ObservableList<T> : IList<T> {
         array = NewArr;
     }
 
-    private void fireCompare(T e1, T e2) {
-        CompareEvent<T> args = new CompareEvent<T>(e1, e2);
-        if (Compare != null) {
-            Compare(this, args);
-        }
-    }
-
-    private void fireAssign(int index, T obj) {
-        AssignEvent<T> args = new AssignEvent<T>(index, obj);
+    private void fireAssign(int index) {
+        AssignEvent args = new AssignEvent(index);
         if (Assign != null) {
             Assign(this, args);
         }
@@ -157,7 +149,22 @@ public class ObservableList<T> : IList<T> {
             return true;
         }
     }
-    
+
+    public override String ToString() {
+        if (Count == 0) {
+            return "[]";
+        } else {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append("[");
+            foreach (T t in array.Take(Count-1)) {
+                sb.Append(t);
+                sb.Append(" ");
+            }
+            sb.Append(array[Count-1]);
+            sb.Append("]");
+            return sb.ToString();
+        }
+    }    
 }
 
 public class CompareEvent<T> : EventArgs {
@@ -170,35 +177,21 @@ public class CompareEvent<T> : EventArgs {
        public T snd { get; private set;}
 }
 
-public class AssignEvent<T> : EventArgs {
-       public AssignEvent(int index, T obj) {
+public class AssignEvent : EventArgs {
+       public AssignEvent(int index) {
               this.index = index;
-              this.obj = obj;
        }
 
        public int index { get; private set; }
-       public T obj { get; private set; }
 }
 
-    internal class Wrapper<T> : IComparable<Wrapper<T>> where T : IComparable<T> {
-         public T wrapped;
-
-         public Wrapper (T val) {
-                wrapped = val;
-         }
-
-         public int CompareTo(Wrapper<T> other) {
-//                outer.fireCompare(new CompareEvent<T>(wrapped, other.wrapped));
-                return wrapped.CompareTo(other.wrapped);
-         }
-    }
-
 public static class Sorting {
-    public static void insertionSort<T>(IList<T> array) where T : IComparable<T> {
+    public static void insertionSort<T>(IList<T> array, IComparer<T> comp) {
+//        Comparer<T> comp = Comparer<T>.Default;
         for (int i=1;i<array.Count;i++) {
             int j = i;
             T val = array[j];
-            while (j>0 && val.CompareTo(array[j-1]) < 0) {
+            while (j>0 && comp.Compare(val,array[j-1]) < 0) {
                 array[j] = array[j-1];
                 j--;
             }
@@ -215,16 +208,17 @@ public class MainClass {
         list.Add(3);
 //        list[2]=list[0];
         Console.WriteLine(list);
-        Sorting.insertionSort(list);
+//        Sorting.insertionSort(list);
         Console.WriteLine(list);
+        Controller<int> c = new Controller<int>(list, new ASCIIView<int>());
+        c.sort(Sorting.insertionSort);
+        
 //        foreach (int i
 //        ObservableArray<int> arr = new ObservableArray<int>(new int[] {3,2,5});
 /*             foreach (int x in arr) {
                 Console.WriteLine(x);
              }
-             Controller<int> c = new Controller<int>(arr, new ASCIIView<int>());
-//             Sorting.insertionSort(arr);
-             c.sort<int>(Sorting.insertionSort);
+
              foreach (int x in arr) {
                 Console.WriteLine(x);
              }                       */  
@@ -234,23 +228,52 @@ public class MainClass {
 public interface ArrayView<T> {
     void init();
     EventHandler<CompareEvent<T>> compareHandler {get;}
-    EventHandler<AssignEvent<T>> assignHandler {get;}
+    EventHandler<AssignEvent> assignHandler {get;}
 }
 
 public class Controller<T> where T : IComparable<T> {
-//    private ObservableArray<T> arr;
+    private ObservableList<T>list;
     private ArrayView<T> view;
+    private EventComparer comp;
     
-    public Controller(ArrayView<T> view) {
-//        this.arr = arr;
+    public Controller(IEnumerable<T> list, ArrayView<T> view) {
+        this.list = new ObservableList<T>();
+        foreach (T t in list) {
+            this.list.Add(t);
+        }
         this.view = view;
 //        arr.Compare += view.compareHandler;
-//        arr.Assign += view.assignHandler;
+        this.list.Assign += view.assignHandler;
+        comp = new EventComparer();
+        comp.CompareHandler += view.compareHandler;
     }        
     
-    public void sort<X>(Action<X[]> func) where X : IComparable<X> {
+    public void sort(Action<IList<T>,IComparer<T>> func) {
 //        arr.sort(func);
+//        Action<IList<Wrapper>> l1 = null;
+//        Action<IList<Object>> l2 = null;
+//        l2=l1;
+        func(list,comp);
     }
+
+    private class EventComparer : IComparer<T>{
+
+        public event EventHandler<CompareEvent<T>> CompareHandler;
+
+        private void fireCompare(T e1, T e2) {
+            CompareEvent<T> args = new CompareEvent<T>(e1, e2);
+            if (CompareHandler != null) {
+                CompareHandler(this, args);
+            }
+        }
+        
+        public int Compare(T t1, T t2) {
+            Comparer<T> comp = Comparer<T>.Default;
+            fireCompare(t1,t2);
+            return comp.Compare(t1,t2);
+        }
+    }
+    
 }
 
 public class ASCIIView<T> : ArrayView<T> {
@@ -259,7 +282,7 @@ public class ASCIIView<T> : ArrayView<T> {
     }
     
     public EventHandler<CompareEvent<T>> compareHandler { get; private set; }
-    public EventHandler<AssignEvent<T>> assignHandler { get; private set; }
+    public EventHandler<AssignEvent> assignHandler { get; private set; }
     
     public ASCIIView() {
         compareHandler = compareEvent;
@@ -270,7 +293,7 @@ public class ASCIIView<T> : ArrayView<T> {
         Console.WriteLine("comparing {0} and {1}", e.fst, e.snd);
     }
     
-    public void assignEvent(Object sender, AssignEvent<T> e) {
-        Console.WriteLine("assigning {0} to index {1}", e.obj, e.index);
+    public void assignEvent(Object sender, AssignEvent e) {
+        Console.WriteLine("assigning to index {0}", e.index);
     }
 }
