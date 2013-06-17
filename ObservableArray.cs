@@ -2,6 +2,132 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+public class ObservableList<T> : IList<T> {
+    private T[] array;
+    private int Size;
+
+    public int Count {
+        get {
+            return Size;
+        }
+        private set {
+            Size = value;
+        }
+    }
+    
+    public bool IsReadOnly {
+        get {
+            return true;
+        }
+    }
+
+    public T this[int index] {
+        get {
+            CheckBounds(index,true);
+            return array[index];
+        }
+        set {
+            CheckBounds(index,false);
+            if (index == Count) {
+                EnsureCapacity(index+1);
+                Count++;
+            }
+            array[index] = value;
+        }
+    }
+
+    private void CheckBounds(int i, bool tight) {
+        if (i < 0 || (i >= Count && tight) || (i > Count && !tight)) {
+            throw new ArgumentOutOfRangeException();
+        }
+    }
+
+    private void EnsureCapacity(int size) {
+        if (size > array.Length) {
+            Expand();
+        }
+    }
+    
+    private void Expand() {
+        int OldSize = array.Length;
+        T[] NewArr = new T[OldSize*2];
+        for (int i=0;i<OldSize;i++) {
+            NewArr[i] = array[i];
+        }
+        array = NewArr;
+    }
+    
+    public int IndexOf(T elem) {
+        Comparer<T> comp = Comparer<T>.Default;
+        for(int i=0;i<Count;i++) {
+            if (comp.Compare(array[i],elem)==0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    
+    public void Insert(int i, T elem) {
+        CheckBounds(i,false);
+        if (i==Count) {
+            EnsureCapacity(i+1);
+            array[i]=elem;
+            Count++;
+        } else {
+            for (int j=Count-1;j>i;j--) {
+                array[j] = array[j-1];
+            }
+            array[i] = elem;
+        }        
+    }
+    
+    public void RemoveAt(int i) {
+        CheckBounds(i,true);
+        for (int j=i;j<Count-1;j++) {
+            array[j] = array[j+1];
+        }
+        Count--;
+    }
+    
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() {
+        return GetEnumerator();
+    }
+    
+    public IEnumerator<T> GetEnumerator() {
+        return ((IEnumerable<T>)array).GetEnumerator();
+    }
+    
+    public void Add(T elem) {
+        EnsureCapacity(Count+1);
+        array[Count++] = elem;
+    }
+    
+    public void Clear() {
+        Count = 0;
+    }
+    
+    public bool Contains(T elem) {
+        return false;
+    }
+    
+    public void CopyTo(T[] arr, int i) {
+        foreach (T t in array) {
+            arr[i++] = t;
+        }
+    }
+    
+    public bool Remove(T elem) {
+        int Index = IndexOf(elem);
+        if (Index < 0) {
+            return false;
+        } else {
+            RemoveAt(Index);
+            return true;
+        }
+    }
+    
+}
+
 public class CompareEvent<T> : EventArgs {
        public CompareEvent(T fst, T snd) {
               this.fst = fst;
@@ -49,7 +175,7 @@ public class ObservableArray<T> : IEnumerable<T> where T : IComparable<T>  {
        }
 
        public void sort<X>(Action<X[]> func) where X : IComparable<X> {
-              Action<IComparable<X>[]> a = func;
+//              Action<IComparable<X>[]> a = func;
 //            func(array);
        }
 
